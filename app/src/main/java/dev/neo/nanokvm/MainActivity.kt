@@ -1,5 +1,10 @@
 package dev.neo.nanokvm
 
+import android.animation.Animator
+import android.animation.ArgbEvaluator
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
@@ -12,6 +17,11 @@ import android.os.Looper
 import android.text.InputType
 import android.text.format.DateUtils
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -50,9 +60,13 @@ class MainActivity : Activity() {
     }
 
     private class Controls(
-        val chip: TextView, val ring: View, val button: View, val icon: ImageView,
+        val chip: TextView, val ring: View, val glow: View, val button: View, val icon: ImageView,
         val state: TextView, val hint: TextView, val info: LinearLayout, val web: WebView?,
-    )
+    ) {
+        var lit: Boolean? = null
+        var breathing: Animator? = null
+        var busy: Animator? = null
+    }
 
     private val tablet get() = resources.configuration.smallestScreenWidthDp >= 600
 
@@ -71,6 +85,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         ui.removeCallbacks(poll)
+        controls?.let { it.breathing?.cancel(); it.breathing = null }
         super.onPause()
     }
 
@@ -126,6 +141,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER; background = round(GREEN, 16); setPadding(0, dp(16), 0, dp(16))
         }
         col.addView(login, lp(top = 12))
+        pressable(login)
         thread {
             val found = Discovery.scan(this)
             runOnUiThread {
@@ -139,11 +155,12 @@ class MainActivity : Activity() {
             thread {
                 val e = runCatching { kvm.ensureSession() }.exceptionOrNull()
                 runOnUiThread {
-                    if (e == null) { showControls(); ui.post(poll) } else { kvm.forget(); err.setTextColor(RED); err.text = e.message ?: e.toString() }
+                    if (e == null) { showControls(); ui.post(poll) } else { kvm.forget(); err.setTextColor(RED); err.text = e.message ?: e.toString(); shake(login) }
                 }
             }
         }
         setContentView(col)
+        enter(col)
     }
 
     private fun showControls() {
@@ -161,13 +178,27 @@ class MainActivity : Activity() {
         col.addView(top, lp(top = 8))
 
         val size = if (tablet) 180 else 220
-        val ring = FrameLayout(this)
+        val ring = FrameLayout(this).apply {
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setStroke(dp(3), 0x336B747D) }
+        }
+        val glow = View(this).apply {
+            alpha = 0f
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                gradientType = GradientDrawable.RADIAL_GRADIENT
+                gradientRadius = dp(size / 2).toFloat()
+                // Fully lit up to the button's edge, then fading out to the ring.
+                setColors(intArrayOf(0x993DDC84.toInt(), 0x993DDC84.toInt(), 0x003DDC84), floatArrayOf(0f, 0.6f, 1f))
+            }
+        }
+        ring.addView(glow, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val button = FrameLayout(this)
         val icon = ImageView(this).apply { setImageResource(R.drawable.ic_power_on) }
         button.addView(icon, FrameLayout.LayoutParams(dp(72), dp(72), Gravity.CENTER))
         ring.addView(button, FrameLayout.LayoutParams(dp(size * 15 / 22), dp(size * 15 / 22), Gravity.CENTER))
         col.addView(ring, LinearLayout.LayoutParams(dp(size), dp(size)).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(if (tablet) 28 else 48) })
         button.setOnClickListener { act("Power pressed") { kvm.press("power", 800) } }
+        pressable(button)
 
         val state = text("…", 30f, GREEN, bold = true).apply { gravity = Gravity.CENTER; letterSpacing = 0.1f }
         col.addView(state, lp(top = 24))
@@ -181,6 +212,7 @@ class MainActivity : Activity() {
             addView(ImageView(context).apply { setImageResource(icon) }, LinearLayout.LayoutParams(dp(26), dp(26)).apply { bottomMargin = dp(6) })
             addView(text(label, 15f, color).apply { gravity = Gravity.CENTER }); addView(text(sub, 12f, GREY).apply { gravity = Gravity.CENTER })
             setOnClickListener { onClick() }
+            pressable(this)
         }
         row.addView(secondary(R.drawable.ic_reset, "Reset", "asks first", TEXT) { confirmReset() }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
         row.addView(secondary(R.drawable.ic_force_off, "Force off", "holds 8 s", RED) { confirmForceOff() }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
@@ -190,6 +222,7 @@ class MainActivity : Activity() {
             val card = LinearLayout(this).apply {
                 gravity = Gravity.CENTER_VERTICAL; background = round(CARD, 18); setPadding(dp(16), dp(14), dp(16), dp(14))
                 setOnClickListener { startActivity(Intent(this@MainActivity, KvmActivity::class.java)) }
+                pressable(this)
             }
             val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             t.addView(text("KVM screen", 16f)); t.addView(text("Open the remote display", 13f, GREY))
@@ -220,8 +253,52 @@ class MainActivity : Activity() {
             insetPadded(scroll, 24)
             setContentView(scroll)
         }
-        controls = Controls(chip, ring, button, icon, state, hint, info, web)
+        controls = Controls(chip, ring, glow, button, icon, state, hint, info, web)
         render(kvm.lastOn, null, null)
+        enter(col)
+    }
+
+    /** Slow green "breathing" glow behind the power button while the PC is on. */
+    private fun breathe(c: Controls, on: Boolean) {
+        if (on && c.breathing == null) {
+            c.glow.scaleX = 0.82f; c.glow.scaleY = 0.82f
+            c.breathing = ObjectAnimator.ofPropertyValuesHolder(c.glow,
+                PropertyValuesHolder.ofFloat(View.ALPHA, 0.2f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.82f, 1f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.82f, 1f),
+            ).apply {
+                duration = 1800; repeatCount = ValueAnimator.INFINITE; repeatMode = ValueAnimator.REVERSE
+                interpolator = AccelerateDecelerateInterpolator()
+                start()
+            }
+        } else if (!on && c.breathing != null) {
+            c.breathing?.cancel(); c.breathing = null
+            c.glow.animate().alpha(0f).setDuration(400).start()
+        }
+    }
+
+    /** Shrinks a view slightly while it's held down. */
+    private fun pressable(v: View) = v.setOnTouchListener { view, e ->
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.95f).scaleY(0.95f).setDuration(90).start()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                view.animate().scaleX(1f).scaleY(1f).setInterpolator(OvershootInterpolator(2f)).setDuration(220).start()
+        }
+        false
+    }
+
+    /** Children fade and slide in one after another. */
+    private fun enter(group: ViewGroup) {
+        for (i in 0 until group.childCount) {
+            val v = group.getChildAt(i)
+            v.alpha = 0f; v.translationY = dp(24).toFloat()
+            v.animate().alpha(1f).translationY(0f).setStartDelay(40L * i).setDuration(380)
+                .setInterpolator(DecelerateInterpolator(2f)).start()
+        }
+    }
+
+    private fun shake(v: View) {
+        ObjectAnimator.ofFloat(v, View.TRANSLATION_X, 0f, -18f, 18f, -12f, 12f, -6f, 6f, 0f).setDuration(420).start()
     }
 
     private fun confirmReset() = confirm("Reset the PC?") { act("Reset pressed") { kvm.press("reset", 800) } }
@@ -234,10 +311,23 @@ class MainActivity : Activity() {
     }
 
     private fun act(done: String, block: () -> Unit) {
-        controls?.hint?.text = "…"
+        controls?.let { c ->
+            c.hint.text = "…"
+            c.busy?.cancel()
+            c.busy = ObjectAnimator.ofPropertyValuesHolder(c.button,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 0.93f), PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 0.93f),
+            ).apply { duration = 450; repeatCount = ValueAnimator.INFINITE; repeatMode = ValueAnimator.REVERSE; start() }
+        }
         thread {
             val e = runCatching(block).exceptionOrNull()
-            runOnUiThread { controls?.hint?.text = if (e == null) done else "Error: ${e.message}" }
+            runOnUiThread {
+                controls?.let { c ->
+                    c.busy?.cancel(); c.busy = null
+                    c.button.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                    c.hint.text = if (e == null) done else "Error: ${e.message}"
+                    if (e != null) shake(c.hint)
+                }
+            }
             if (e == null) { Thread.sleep(3000); refresh() }
         }
     }
@@ -264,17 +354,26 @@ class MainActivity : Activity() {
         }
         c.chip.setTextColor(if (error != null) RED else if (d != null) GREEN else GREY)
         val lit = on == true
-        c.ring.background = GradientDrawable().apply {
-            shape = GradientDrawable.OVAL
-            gradientType = GradientDrawable.RADIAL_GRADIENT
-            gradientRadius = dp(110).toFloat()
-            colors = intArrayOf(if (lit) 0xFF13261B.toInt() else 0xFF161A1F.toInt(), BG)
-            setStroke(dp(3), if (lit) 0x553DDC84 else 0x336B747D)
+        val changed = c.lit != null && c.lit != lit
+        if (c.lit != lit) {
+            (c.ring.background as GradientDrawable).setStroke(dp(3), if (lit) 0x553DDC84 else 0x336B747D)
+            c.button.background = oval(if (lit) GREEN_DARK else OFF_FILL, if (lit) GREEN else 0xFF6B747D.toInt())
+            c.icon.setImageResource(if (lit) R.drawable.ic_power_on else R.drawable.ic_power_off)
+            ValueAnimator.ofArgb(c.state.currentTextColor, if (lit) GREEN else GREY).apply {
+                duration = 400
+                addUpdateListener { c.state.setTextColor(it.animatedValue as Int) }
+                start()
+            }
         }
-        c.button.background = oval(if (lit) GREEN_DARK else OFF_FILL, if (lit) GREEN else 0xFF6B747D.toInt())
-        c.icon.setImageResource(if (lit) R.drawable.ic_power_on else R.drawable.ic_power_off)
+        if (changed) {
+            c.button.scaleX = 0.85f; c.button.scaleY = 0.85f
+            c.button.animate().scaleX(1f).scaleY(1f).setInterpolator(OvershootInterpolator(3f)).setDuration(450).start()
+            c.state.alpha = 0f; c.state.translationY = dp(8).toFloat()
+            c.state.animate().alpha(1f).translationY(0f).setDuration(300).start()
+        }
+        c.lit = lit
         c.state.text = when (on) { true -> "ON"; false -> "OFF"; null -> "?" }
-        c.state.setTextColor(if (lit) GREEN else GREY)
+        breathe(c, lit)
         if (live && c.hint.text == "…") c.hint.text = "Tap to press power"
 
         val since = kvm.lastChanged.takeIf { it > 0 }?.let {
