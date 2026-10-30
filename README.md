@@ -4,12 +4,12 @@ Control a PC through its [Sipeed NanoKVM](https://github.com/sipeed/NanoKVM) fro
 remotely over Tailscale: see whether it's on, press power or reset, force it off, and open the KVM screen.
 
 <p>
-<img src="docs/screenshots/pulse.gif" width="260" alt="Power button pulsing while the PC is on">
-<img src="docs/screenshots/phone.png" width="260" alt="Main screen">
-<img src="docs/screenshots/phone-info.png" width="260" alt="Status and network">
+<img src="docs/screenshots/power-pulse.gif" width="200" alt="Power button pulsing while the PC is on">
+<img src="docs/screenshots/main.png" width="200" alt="Main screen">
+<img src="docs/screenshots/status.png" width="200" alt="Status and network">
+<img src="docs/screenshots/home-widgets.png" width="200" alt="Widgets">
 </p>
-<img src="docs/screenshots/widgets.png" width="260" alt="Widgets">
-<img src="docs/screenshots/tablet.png" width="800" alt="Tablet layout">
+<p><img src="docs/screenshots/tablet-split.png" width="824" alt="Tablet layout"></p>
 
 ## Features
 - **Power:** tap the big button for a short power press, which also wakes the PC. It glows and pulses green while
