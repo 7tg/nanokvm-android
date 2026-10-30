@@ -1,0 +1,29 @@
+<html><head><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Inter","Roboto",system-ui,sans-serif;background:#0b0d10;color:#e8eaed;width:412px;height:915px;overflow:hidden;position:relative}
+.sb{height:36px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:13px;color:#cfd3d8}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:13px;background:#1a1f26;color:#b8c0c8}
+.dot{width:8px;height:8px;border-radius:50%;background:#3ddc84;box-shadow:0 0 8px #3ddc84}
+
+.wrap{padding:8px 24px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+h1{font-size:22px;font-weight:600}
+.sub{color:#8a939c;font-size:14px;margin-top:4px}
+.ring{margin:56px auto 0;width:220px;height:220px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+ background:radial-gradient(circle,#13261b 0%,#0b0d10 70%);box-shadow:0 0 0 3px #3ddc8455,0 0 60px #3ddc8433}
+.btn{width:150px;height:150px;border-radius:50%;background:#16301f;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 2px #3ddc84}
+.state{text-align:center;margin-top:26px;font-size:30px;font-weight:700;color:#3ddc84;letter-spacing:2px}
+.hint{text-align:center;color:#8a939c;font-size:13px;margin-top:6px}
+.row{display:flex;gap:12px;margin-top:40px}
+.sec{flex:1;background:#151a20;border-radius:18px;padding:16px;font-size:15px;text-align:center}
+.sec small{display:block;color:#8a939c;font-size:12px;margin-top:4px}
+.warn{color:#ff8a80}
+.kvm{margin-top:16px;background:#151a20;border-radius:18px;padding:14px;display:flex;gap:14px;align-items:center}
+.thumb{width:110px;height:62px;border-radius:10px;background:repeating-linear-gradient(45deg,#1d232b 0 8px,#181d23 8px 16px);display:flex;align-items:center;justify-content:center;font-size:11px;color:#6b747d}
+</style></head><body><div class="sb"><span>10:24</span><span>▾ ▴ 87%</span></div><div class="wrap">
+<div class="top"><div><h1>Mainframe</h1><div class="sub">Ryzen · NanoKVM PCIe</div></div><span class="chip"><span class="dot"></span>LAN · 9 ms</span></div>
+<div class="ring"><div class="btn"><svg viewBox="0 0 24 24" width="72" height="72" fill="#3ddc84"><path d="M13,3h-2v10h2L13,3zM17.83,5.17l-1.42,1.42C17.99,7.86 19,9.81 19,12c0,3.87 -3.13,7 -7,7s-7,-3.13 -7,-7c0,-2.19 1.01,-4.14 2.58,-5.42L6.17,5.17C4.23,6.82 3,9.26 3,12c0,4.97 4.03,9 9,9s9,-4.03 9,-9c0,-2.74 -1.23,-5.18 -3.17,-6.83z"/></svg></div></div>
+<div class="state">ON</div><div class="hint">Tap to press power · hold for options</div>
+<div class="row"><div class="sec">↻ Reset<small>confirm</small></div><div class="sec warn">⏻ Force off<small>hold 8 s</small></div></div>
+<div class="kvm"><div class="thumb">no signal</div><div><div style="font-size:16px">KVM screen</div><div class="sub">Open remote display</div></div><div style="margin-left:auto;color:#8a939c;font-size:22px">›</div></div>
+</div></body></html>

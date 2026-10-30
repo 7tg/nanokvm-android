@@ -1,0 +1,34 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/w_bg"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="14dp">
+    <ImageButton
+        android:id="@+id/power"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/w_btn_on"
+        android:contentDescription="Power"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_power_on" />
+    <LinearLayout
+        android:id="@+id/status"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:paddingStart="12dp">
+        <TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="PC ?" android:textColor="#FFFFFFFF" android:textSize="17sp" android:textStyle="bold" />
+        <TextView android:id="@+id/sub" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="tap to refresh" android:textColor="#FF9AA3AB" android:textSize="12sp" />
+    </LinearLayout>
+    <ImageButton android:id="@+id/reset" android:layout_width="44dp" android:layout_height="44dp" android:layout_marginStart="8dp"
+        android:background="@drawable/w_small" android:contentDescription="Reset" android:padding="10dp" android:scaleType="fitCenter" android:src="@drawable/ic_reset_w" />
+    <ImageButton android:id="@+id/screen" android:layout_width="44dp" android:layout_height="44dp" android:layout_marginStart="8dp"
+        android:background="@drawable/w_small" android:contentDescription="KVM screen" android:padding="10dp" android:scaleType="fitCenter" android:src="@drawable/ic_screen_w" />
+</LinearLayout>

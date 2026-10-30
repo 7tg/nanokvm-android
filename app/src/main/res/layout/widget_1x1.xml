@@ -1,0 +1,17 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/w_bg"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="14dp">
+    <ImageButton
+        android:id="@+id/power"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:background="@drawable/w_btn_on"
+        android:contentDescription="Power"
+        android:padding="12dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_power_on" />
+</LinearLayout>
