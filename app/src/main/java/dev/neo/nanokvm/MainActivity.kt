@@ -52,6 +52,8 @@ class MainActivity : Activity() {
     private lateinit var kvm: Kvm
     private lateinit var tapo: Tapo
     private val busyPlugs = mutableSetOf<String>()
+    /** Last Tapo error, shown in the Devices section until the next success (a toast is easy to miss). */
+    private var tapoError: String? = null
     private val ui = Handler(Looper.getMainLooper())
     private var controls: Controls? = null
     private val poll = object : Runnable {
@@ -404,6 +406,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL; background = round(CARD, 18); setPadding(dp(16), dp(14), dp(16), dp(14))
                 addView(text("Add Tapo plugs", 16f))
                 addView(text("Switch smart plugs on this Wi-Fi with your TP-Link account", 13f, GREY))
+                tapoError?.let { addView(text(it, 13f, RED), lp(top = 6)) }
                 setOnClickListener { tapoLogin() }
             }
             pressable(add)
@@ -439,25 +442,31 @@ class MainActivity : Activity() {
             grid.addView(row, lp(top = 10))
         }
         box.addView(grid)
+        tapoError?.let { box.addView(text(it, 13f, RED), lp(top = 8)) }
         box.addView(text("Rescan · Log out of Tapo", 12f, GREY).apply {
             gravity = Gravity.END; setPadding(0, dp(8), dp(4), 0)
             setOnClickListener {
                 AlertDialog.Builder(this@MainActivity).setItems(arrayOf("Rescan plugs", "Log out of Tapo")) { _, i ->
-                    if (i == 0) thread { val e = runCatching { tapo.setup() }.exceptionOrNull(); runOnUiThread { renderDevices(); e?.let { toast(it) } } }
+                    if (i == 0) thread { val e = runCatching { tapo.setup() }.exceptionOrNull(); runOnUiThread { tapoError = e?.let(::describe); renderDevices() } }
                     else { tapo.forget(); renderDevices(); PlugWidget.render(this@MainActivity) }
                 }.show()
             }
         }, lp())
     }
 
-    private fun toast(e: Throwable) = android.widget.Toast.makeText(this, e.message ?: e.toString(), android.widget.Toast.LENGTH_LONG).show()
+    /** Plain-language Tapo error. */
+    private fun describe(e: Throwable): String = when (e) {
+        is KvmError -> e.message ?: "Tapo error"
+        is java.net.SocketTimeoutException, is java.net.ConnectException -> "Couldn't reach the plug. Is the phone on the same Wi-Fi?"
+        else -> e.message ?: e.toString()
+    }.also { android.util.Log.w("Tapo", it, e) }
 
     private fun togglePlug(mac: String) {
         if (!busyPlugs.add(mac)) return
         renderDevices()
         thread {
             val e = runCatching { tapo.set(mac, tapo.lastOn(mac) != true) }.exceptionOrNull()
-            runOnUiThread { busyPlugs.remove(mac); renderDevices(); e?.let { toast(it) } }
+            runOnUiThread { busyPlugs.remove(mac); tapoError = e?.let(::describe); renderDevices() }
             PlugWidget.render(this)
         }
     }
@@ -476,7 +485,8 @@ class MainActivity : Activity() {
                 thread {
                     val e = runCatching { tapo.setup() }.exceptionOrNull()
                     runOnUiThread {
-                        if (e != null) { tapo.forget(); toast(e) }
+                        if (e != null) tapo.forget()
+                        tapoError = e?.let(::describe)
                         renderDevices()
                     }
                 }

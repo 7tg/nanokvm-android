@@ -62,7 +62,10 @@ class Tapo(private val context: Context) {
     fun setup(): List<Plug> {
         val plain = discover()
         if (plain.isEmpty()) throw IOException("No Tapo plugs found on this Wi-Fi")
-        val found = plain.map { it.copy(name = info(it).nickname) } // throws on a wrong login
+        // One plug that doesn't answer shouldn't hide the others; a wrong login fails on every plug.
+        val results = plain.map { p -> p to runCatching { info(p) } }
+        if (results.all { it.second.isFailure }) throw results.first().second.exceptionOrNull()!!
+        val found = results.map { (p, r) -> r.getOrNull()?.let { p.copy(name = it.nickname) } ?: p }
         savePlugs(found)
         return found
     }
@@ -151,8 +154,11 @@ class Tapo(private val context: Context) {
 
     // --- Discovery ---
 
-    /** Broadcasts the Tapo discovery query on Wi-Fi (and to known plugs directly) and collects KLAP plugs for 3 s. */
-    fun discover(): List<Plug> {
+    /**
+     * Broadcasts the Tapo discovery query on Wi-Fi (limited and subnet broadcast, plus known plugs directly) every
+     * 500 ms and collects KLAP plugs for 4 s. Some plugs answer UDP only now and then, hence the repeats.
+     */
+    fun discover(extraTargets: List<String> = emptyList()): List<Plug> {
         val cm = context.getSystemService(ConnectivityManager::class.java)
         val wifi = cm.allNetworks.firstOrNull { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
         val query = discoveryQuery()
@@ -161,14 +167,22 @@ class Tapo(private val context: Context) {
             wifi?.bindSocket(s)
             s.broadcast = true
             s.soTimeout = 300
-            val targets = listOf("255.255.255.255") + plugs.map { it.ip }
-            val end = System.currentTimeMillis() + 3000
+            val subnet = wifi?.let { cm.getLinkProperties(it) }?.linkAddresses
+                ?.firstOrNull { it.address is java.net.Inet4Address }
+                ?.let { la ->
+                    val ip = ByteBuffer.wrap(la.address.address).int
+                    val mask = if (la.prefixLength == 0) 0 else -1 shl (32 - la.prefixLength)
+                    InetAddress.getByAddress(ByteBuffer.allocate(4).putInt(ip or mask.inv()).array()).hostAddress
+                }
+            val targets = (if (extraTargets.isEmpty()) listOfNotNull("255.255.255.255", subnet) else extraTargets) + plugs.map { it.ip }
+            val end = System.currentTimeMillis() + 4000
             var nextSend = 0L
             val buf = ByteArray(4096)
             while (System.currentTimeMillis() < end) {
                 if (System.currentTimeMillis() >= nextSend) {
                     for (t in targets.distinct()) runCatching { s.send(DatagramPacket(query, query.size, InetAddress.getByName(t), 20002)) }
-                    nextSend = System.currentTimeMillis() + 1000
+                        .onFailure { android.util.Log.w("Tapo", "discovery send to $t failed", it) }
+                    nextSend = System.currentTimeMillis() + 500
                 }
                 val pkt = DatagramPacket(buf, buf.size)
                 try {

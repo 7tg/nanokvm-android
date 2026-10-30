@@ -67,7 +67,10 @@ with a PC that turns on and off. In the emulator, log in to `10.0.2.2:8088` as `
 `python3 tools/mock_tapo.py` runs two fake Tapo plugs (KLAP on ports 8091/8092, discovery on UDP 20002); log in
 as `test@example.com` / `tapo`. Broadcasts don't reach the host from the emulator, so first seed a plug at
 `10.0.2.2` in the app's `shared_prefs/tapo.xml` (`run-as`); discovery then asks it directly.
-Wi-Fi discovery can't see the mocks, so test that on a real device. Tablet layout on a phone emulator:
+Wi-Fi discovery can't see the mocks, so test that on a real device.
+Debug builds install as `dev.neo.nanokvm.debug` next to the release app. On a real phone,
+`adb shell am start -n dev.neo.nanokvm.debug/dev.neo.nanokvm.TapoProbe` runs Tapo discovery and logs the result
+(`adb logcat -s TapoProbe`). It has to run in the foreground: Android blocks sockets of background apps (EPERM). Tablet layout on a phone emulator:
 `adb shell wm size 2560x1600 && adb shell wm density 320`.
 
 ## Releases

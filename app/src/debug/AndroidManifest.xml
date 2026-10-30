@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application android:label="NanoKVM (debug)" tools:replace="android:label">
+        <!-- adb shell am start -n dev.neo.nanokvm.debug/dev.neo.nanokvm.TapoProbe ; logcat -s TapoProbe -->
+        <activity android:name=".TapoProbe" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>

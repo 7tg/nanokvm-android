@@ -32,6 +32,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Installs next to the release app, so dev builds never touch the real one.
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
