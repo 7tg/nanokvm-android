@@ -11,7 +11,7 @@ remotely over Tailscale: see whether it's on, press power or reset, force it off
 <img src="docs/screenshots/tablet.png" width="800" alt="Tablet layout">
 
 ## Features
-- **Power:** tap the big button for a short power press (also wakes the PC); hold it for Reset / Force off.
+- **Power:** tap the big button for a short power press (also wakes the PC); Reset and Force off have their own buttons.
   Reset and Force off (8 s hold) ask first.
 - **Status:** on/off from the power LED, HDMI signal, latency, last state change, NanoKVM version.
 - **Finds the NanoKVM itself:** scans your Wi-Fi for it on first launch, and learns its Tailscale address after

@@ -168,14 +168,10 @@ class MainActivity : Activity() {
         ring.addView(button, FrameLayout.LayoutParams(dp(size * 15 / 22), dp(size * 15 / 22), Gravity.CENTER))
         col.addView(ring, LinearLayout.LayoutParams(dp(size), dp(size)).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dp(if (tablet) 28 else 48) })
         button.setOnClickListener { act("Power pressed") { kvm.press("power", 800) } }
-        button.setOnLongClickListener {
-            AlertDialog.Builder(this).setItems(arrayOf("Reset", "Force off")) { _, i -> if (i == 0) confirmReset() else confirmForceOff() }.show()
-            true
-        }
 
         val state = text("…", 30f, GREEN, bold = true).apply { gravity = Gravity.CENTER; letterSpacing = 0.1f }
         col.addView(state, lp(top = 24))
-        val hint = text("Tap to press power · hold for options", 13f, GREY).apply { gravity = Gravity.CENTER }
+        val hint = text("Tap to press power", 13f, GREY).apply { gravity = Gravity.CENTER }
         col.addView(hint, lp(top = 4))
 
         val row = LinearLayout(this)
@@ -279,7 +275,7 @@ class MainActivity : Activity() {
         c.icon.setImageResource(if (lit) R.drawable.ic_power_on else R.drawable.ic_power_off)
         c.state.text = when (on) { true -> "ON"; false -> "OFF"; null -> "?" }
         c.state.setTextColor(if (lit) GREEN else GREY)
-        if (live && c.hint.text == "…") c.hint.text = "Tap to press power · hold for options"
+        if (live && c.hint.text == "…") c.hint.text = "Tap to press power"
 
         val since = kvm.lastChanged.takeIf { it > 0 }?.let {
             if (System.currentTimeMillis() - it < 60_000) "just now"
