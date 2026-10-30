@@ -50,6 +50,8 @@ class MainActivity : Activity() {
     }
 
     private lateinit var kvm: Kvm
+    private lateinit var tapo: Tapo
+    private val busyPlugs = mutableSetOf<String>()
     private val ui = Handler(Looper.getMainLooper())
     private var controls: Controls? = null
     private val poll = object : Runnable {
@@ -61,7 +63,7 @@ class MainActivity : Activity() {
 
     private class Controls(
         val chip: TextView, val ring: View, val glow: View, val button: View, val icon: ImageView,
-        val state: TextView, val hint: TextView, val info: LinearLayout, val web: WebView?,
+        val state: TextView, val hint: TextView, val info: LinearLayout, val devices: LinearLayout, val web: WebView?,
     ) {
         var lit: Boolean? = null
         var breathing: Animator? = null
@@ -74,6 +76,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.decorView.setBackgroundColor(BG)
         kvm = Kvm(this)
+        tapo = Tapo(this)
         if (kvm.hasLogin) showControls() else showLogin()
         if (intent.getBooleanExtra(EXTRA_RESET, false) && kvm.hasLogin) confirmReset()
     }
@@ -133,7 +136,7 @@ class MainActivity : Activity() {
         }
         val address = field("Searching Wi-Fi…", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val user = field("Username", InputType.TYPE_CLASS_TEXT).apply { setText("admin") }
-        val pass = field("Password", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        val pass = field("Password", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD).apply { typeface = Typeface.DEFAULT }
         col.addView(address, lp(top = 28)); col.addView(user, lp(top = 12)); col.addView(pass, lp(top = 12))
         val err = text("", 14f, RED)
         col.addView(err, lp(top = 12))
@@ -231,6 +234,8 @@ class MainActivity : Activity() {
             col.addView(card, lp(top = 12))
         }
 
+        val devices = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(devices, lp(top = 24))
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         col.addView(info, lp(top = 24))
         col.addView(text("Log out", 14f, GREY).apply {
@@ -253,7 +258,8 @@ class MainActivity : Activity() {
             insetPadded(scroll, 24)
             setContentView(scroll)
         }
-        controls = Controls(chip, ring, glow, button, icon, state, hint, info, web)
+        controls = Controls(chip, ring, glow, button, icon, state, hint, info, devices, web)
+        renderDevices()
         render(kvm.lastOn, null, null)
         enter(col)
     }
@@ -341,6 +347,9 @@ class MainActivity : Activity() {
             val d = if (r.isSuccess) Details(runCatching { kvm.hdmiSignal() }.getOrNull(), runCatching { kvm.version() }.getOrNull()) else null
             runOnUiThread { render(r.getOrNull(), d, r.exceptionOrNull()) }
             PowerWidget.render(this)
+            tapo.plugs.forEach { p -> if (p.mac !in busyPlugs) runCatching { tapo.isOn(p.mac) } }
+            runOnUiThread { renderDevices() }
+            PlugWidget.render(this)
         }
     }
 
@@ -384,6 +393,95 @@ class MainActivity : Activity() {
     }
 
     private fun header(s: String) = text(s.uppercase(), 12f, GREY, bold = true).apply { letterSpacing = 0.12f }
+
+    /** Tapo plugs: one card per plug (tap toggles), or a card to add them. */
+    private fun renderDevices() {
+        val box = controls?.devices ?: return
+        box.removeAllViews()
+        box.addView(header("Devices"), lp())
+        if (!tapo.hasLogin || tapo.plugs.isEmpty()) {
+            val add = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; background = round(CARD, 18); setPadding(dp(16), dp(14), dp(16), dp(14))
+                addView(text("Add Tapo plugs", 16f))
+                addView(text("Switch smart plugs on this Wi-Fi with your TP-Link account", 13f, GREY))
+                setOnClickListener { tapoLogin() }
+            }
+            pressable(add)
+            box.addView(add, lp(top = 10))
+            return
+        }
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        tapo.plugs.chunked(2).forEach { pair ->
+            val row = LinearLayout(this)
+            pair.forEachIndexed { i, plug ->
+                val on = tapo.lastOn(plug.mac)
+                val busy = plug.mac in busyPlugs
+                val card = LinearLayout(this).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = round(if (on == true) 0xFF13261B.toInt() else CARD, 18, if (on == true) 0x553DDC84 else 0)
+                    setPadding(dp(14), dp(14), dp(14), dp(14))
+                    val dot = FrameLayout(context).apply { background = oval(if (on == true) GREEN_DARK else OFF_FILL, if (on == true) GREEN else 0xFF6B747D.toInt()) }
+                    dot.addView(ImageView(context).apply { setImageResource(R.drawable.ic_plug); setColorFilter(if (on == true) GREEN else 0xFF9AA3AB.toInt()) },
+                        FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER))
+                    addView(dot, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginEnd = dp(12) })
+                    val t = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+                    t.addView(text(plug.name, 15f).apply { maxLines = 1 })
+                    t.addView(text(if (busy) "…" else when (on) { true -> "On"; false -> "Off"; null -> "?" }, 12f, if (on == true) GREEN else GREY))
+                    addView(t, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                    setOnClickListener { togglePlug(plug.mac) }
+                }
+                pressable(card)
+                row.addView(card, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply {
+                    if (i == 0) marginEnd = dp(6) else marginStart = dp(6)
+                })
+            }
+            if (pair.size == 1) row.addView(View(this), LinearLayout.LayoutParams(0, 0, 1f).apply { marginStart = dp(6) })
+            grid.addView(row, lp(top = 10))
+        }
+        box.addView(grid)
+        box.addView(text("Rescan · Log out of Tapo", 12f, GREY).apply {
+            gravity = Gravity.END; setPadding(0, dp(8), dp(4), 0)
+            setOnClickListener {
+                AlertDialog.Builder(this@MainActivity).setItems(arrayOf("Rescan plugs", "Log out of Tapo")) { _, i ->
+                    if (i == 0) thread { val e = runCatching { tapo.setup() }.exceptionOrNull(); runOnUiThread { renderDevices(); e?.let { toast(it) } } }
+                    else { tapo.forget(); renderDevices(); PlugWidget.render(this@MainActivity) }
+                }.show()
+            }
+        }, lp())
+    }
+
+    private fun toast(e: Throwable) = android.widget.Toast.makeText(this, e.message ?: e.toString(), android.widget.Toast.LENGTH_LONG).show()
+
+    private fun togglePlug(mac: String) {
+        if (!busyPlugs.add(mac)) return
+        renderDevices()
+        thread {
+            val e = runCatching { tapo.set(mac, tapo.lastOn(mac) != true) }.exceptionOrNull()
+            runOnUiThread { busyPlugs.remove(mac); renderDevices(); e?.let { toast(it) } }
+            PlugWidget.render(this)
+        }
+    }
+
+    private fun tapoLogin() {
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0) }
+        val email = EditText(this).apply { hint = "TP-Link email"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }
+        val pass = EditText(this).apply { hint = "Password"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; typeface = Typeface.DEFAULT }
+        col.addView(email); col.addView(pass)
+        col.addView(text("Needs \"Third-Party Compatibility\" on in the Tapo app (Me → Third-Party Services).", 12f, GREY), lp(top = 8))
+        AlertDialog.Builder(this).setTitle("Tapo account").setView(col).setNegativeButton("Cancel", null)
+            .setPositiveButton("Find plugs") { _, _ ->
+                tapo.saveLogin(email.text.toString().trim(), pass.text.toString())
+                busyPlugs.clear()
+                controls?.devices?.let { it.removeAllViews(); it.addView(header("Devices")); it.addView(text("Searching for plugs…", 14f, GREY), lp(top = 10)) }
+                thread {
+                    val e = runCatching { tapo.setup() }.exceptionOrNull()
+                    runOnUiThread {
+                        if (e != null) { tapo.forget(); toast(e) }
+                        renderDevices()
+                    }
+                }
+            }.show()
+    }
 
     /** Status tiles (2x2) and a network card with one row per address. */
     private fun renderInfo(box: LinearLayout, on: Boolean?, d: Details?, error: Throwable?, since: String?) {
