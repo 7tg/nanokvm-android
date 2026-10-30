@@ -209,7 +209,7 @@ class MainActivity : Activity() {
             setOnClickListener { kvm.forget(); PowerWidget.render(this@MainActivity); showLogin() }
         }, lp(top = 4))
 
-        val scroll = ScrollView(this).apply { addView(col) }
+        val scroll = ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(col) }
         val web: WebView?
         if (tablet) {
             val split = LinearLayout(this)
