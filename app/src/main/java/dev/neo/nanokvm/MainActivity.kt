@@ -40,6 +40,8 @@ private const val CARD = 0xFF151A20.toInt()
 private const val GREEN = 0xFF3DDC84.toInt()
 private const val GREEN_DARK = 0xFF16301F.toInt()
 private const val GREY = 0xFF8A939C.toInt()
+private const val AMBER = 0xFFFFB74D.toInt()
+private const val AMBER_DARK = 0xFF33270F.toInt()
 private const val OFF_FILL = 0xFF2A2F36.toInt()
 private const val RED = 0xFFFF8A80.toInt()
 private const val TEXT = 0xFFE8EAED.toInt()
@@ -67,7 +69,8 @@ class MainActivity : Activity() {
         val chip: TextView, val ring: View, val glow: View, val button: View, val icon: ImageView,
         val state: TextView, val hint: TextView, val info: LinearLayout, val devices: LinearLayout, val web: WebView?,
     ) {
-        var lit: Boolean? = null
+        var mode: Power? = null
+        var animMode: Power? = null
         var breathing: Animator? = null
         var busy: Animator? = null
     }
@@ -90,7 +93,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         ui.removeCallbacks(poll)
-        controls?.let { it.breathing?.cancel(); it.breathing = null }
+        controls?.let { it.breathing?.cancel(); it.breathing = null; it.animMode = null }
         super.onPause()
     }
 
@@ -262,26 +265,37 @@ class MainActivity : Activity() {
         }
         controls = Controls(chip, ring, glow, button, icon, state, hint, info, devices, web)
         renderDevices()
-        render(kvm.lastOn, null, null)
+        render(kvm.lastPower, null, null)
         enter(col)
     }
 
     /** Slow green "breathing" glow behind the power button while the PC is on. */
-    private fun breathe(c: Controls, on: Boolean) {
-        if (on && c.breathing == null) {
-            c.glow.scaleX = 0.82f; c.glow.scaleY = 0.82f
-            c.breathing = ObjectAnimator.ofPropertyValuesHolder(c.glow,
-                PropertyValuesHolder.ofFloat(View.ALPHA, 0.2f, 1f),
-                PropertyValuesHolder.ofFloat(View.SCALE_X, 0.82f, 1f),
-                PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.82f, 1f),
-            ).apply {
-                duration = 1800; repeatCount = ValueAnimator.INFINITE; repeatMode = ValueAnimator.REVERSE
-                interpolator = AccelerateDecelerateInterpolator()
-                start()
-            }
-        } else if (!on && c.breathing != null) {
-            c.breathing?.cancel(); c.breathing = null
+    /** Glow behind the power button: slow green breathing while on, amber blinking like the LED while asleep. */
+    private fun breathe(c: Controls, power: Power?) {
+        if (power == c.animMode && (c.breathing != null || power != Power.ON && power != Power.SLEEP)) return
+        c.breathing?.cancel(); c.breathing = null
+        c.animMode = power
+        if (power != Power.ON && power != Power.SLEEP) {
             c.glow.animate().alpha(0f).setDuration(400).start()
+            return
+        }
+        val color = if (power == Power.ON) 0x003DDC84 else 0x00FFB74D
+        (c.glow.background as GradientDrawable).setColors(
+            intArrayOf(color or 0x99000000.toInt(), color or 0x99000000.toInt(), color), floatArrayOf(0f, 0.6f, 1f))
+        c.glow.scaleX = 0.82f; c.glow.scaleY = 0.82f
+        c.breathing = if (power == Power.ON) ObjectAnimator.ofPropertyValuesHolder(c.glow,
+            PropertyValuesHolder.ofFloat(View.ALPHA, 0.2f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_X, 0.82f, 1f),
+            PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.82f, 1f),
+        ).apply {
+            duration = 1800; repeatCount = ValueAnimator.INFINITE; repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        } else ObjectAnimator.ofFloat(c.glow, View.ALPHA, 0.05f, 0.9f).apply {
+            c.glow.scaleX = 0.9f; c.glow.scaleY = 0.9f
+            duration = 1100; repeatCount = ValueAnimator.INFINITE; repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
         }
     }
 
@@ -345,7 +359,7 @@ class MainActivity : Activity() {
     private fun refresh() {
         thread {
             if (kvm.tailscale == null) runCatching { kvm.ensureSession() }
-            val r = runCatching { kvm.isOn() }
+            val r = runCatching { kvm.power() }
             val d = if (r.isSuccess) Details(runCatching { kvm.hdmiSignal() }.getOrNull(), runCatching { kvm.version() }.getOrNull()) else null
             runOnUiThread { render(r.getOrNull(), d, r.exceptionOrNull()) }
             PowerWidget.render(this)
@@ -355,7 +369,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun render(on: Boolean?, d: Details?, error: Throwable?) {
+    private fun render(power: Power?, d: Details?, error: Throwable?) {
+        val on: Boolean? = power?.let { it != Power.OFF }
         val c = controls ?: return
         val live = error == null && on != null
         c.chip.text = when {
@@ -364,13 +379,17 @@ class MainActivity : Activity() {
             else -> "● ${if (kvm.viaTailscale) "Tailscale" else "LAN"}"
         }
         c.chip.setTextColor(if (error != null) RED else if (d != null) GREEN else GREY)
-        val lit = on == true
-        val changed = c.lit != null && c.lit != lit
-        if (c.lit != lit) {
-            (c.ring.background as GradientDrawable).setStroke(dp(3), if (lit) 0x553DDC84 else 0x336B747D)
-            c.button.background = oval(if (lit) GREEN_DARK else OFF_FILL, if (lit) GREEN else 0xFF6B747D.toInt())
-            c.icon.setImageResource(if (lit) R.drawable.ic_power_on else R.drawable.ic_power_off)
-            ValueAnimator.ofArgb(c.state.currentTextColor, if (lit) GREEN else GREY).apply {
+        val changed = c.mode != null && c.mode != power
+        if (c.mode != power) {
+            val (fill, accent, ring) = when (power) {
+                Power.ON -> Triple(GREEN_DARK, GREEN, 0x553DDC84)
+                Power.SLEEP -> Triple(AMBER_DARK, AMBER, 0x55FFB74D)
+                else -> Triple(OFF_FILL, 0xFF6B747D.toInt(), 0x336B747D)
+            }
+            (c.ring.background as GradientDrawable).setStroke(dp(3), ring)
+            c.button.background = oval(fill, accent)
+            c.icon.setImageResource(when (power) { Power.ON -> R.drawable.ic_power_on; Power.SLEEP -> R.drawable.ic_power_sleep; else -> R.drawable.ic_power_off })
+            ValueAnimator.ofArgb(c.state.currentTextColor, if (power == Power.OFF || power == null) GREY else accent).apply {
                 duration = 400
                 addUpdateListener { c.state.setTextColor(it.animatedValue as Int) }
                 start()
@@ -382,10 +401,15 @@ class MainActivity : Activity() {
             c.state.alpha = 0f; c.state.translationY = dp(8).toFloat()
             c.state.animate().alpha(1f).translationY(0f).setDuration(300).start()
         }
-        c.lit = lit
-        c.state.text = when (on) { true -> "ON"; false -> "OFF"; null -> "?" }
-        breathe(c, lit)
-        if (live && c.hint.text == "…") c.hint.text = "Tap to press power"
+        c.mode = power
+        c.state.text = when (power) { Power.ON -> "ON"; Power.OFF -> "OFF"; Power.SLEEP -> "SLEEP"; null -> "?" }
+        breathe(c, power)
+        if (live) c.hint.text = when {
+            c.hint.text != "…" && c.hint.text.startsWith("Error") -> c.hint.text
+            power == Power.SLEEP -> "Asleep · tap to wake"
+            power == Power.OFF -> "Tap to power on"
+            else -> "Tap to press power"
+        }
 
         val since = kvm.lastChanged.takeIf { it > 0 }?.let {
             if (System.currentTimeMillis() - it < 60_000) "just now"

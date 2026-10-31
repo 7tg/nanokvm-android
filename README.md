@@ -5,17 +5,20 @@ remotely over Tailscale: see whether it's on, press power or reset, force it off
 switches TP-Link Tapo smart plugs, such as the ones powering your monitor and speakers.
 
 <p>
-<img src="docs/screenshots/power-pulse.gif" width="200" alt="Power button pulsing while the PC is on">
-<img src="docs/screenshots/main.png" width="200" alt="Main screen">
-<img src="docs/screenshots/devices-status.png" width="200" alt="Tapo plugs and status">
-<img src="docs/screenshots/widgets.png" width="200" alt="Widgets">
+<img src="docs/screenshots/power-pulse.gif" width="160" alt="Power button pulsing while the PC is on">
+<img src="docs/screenshots/main.png" width="160" alt="Main screen">
+<img src="docs/screenshots/sleep.png" width="160" alt="PC asleep">
+<img src="docs/screenshots/devices-status.png" width="160" alt="Tapo plugs and status">
+<img src="docs/screenshots/widgets.png" width="160" alt="Widgets">
 </p>
 <p><img src="docs/screenshots/tablet-split.png" width="824" alt="Tablet layout"></p>
 
 ## Features
 - **Power:** tap the big button for a short power press, which also wakes the PC. It glows and pulses green while
   the PC is on. Reset and Force off (an 8 s hold) have their own buttons and ask first.
-- **Status:** on/off from the power LED, HDMI signal, latency, last state change, NanoKVM version.
+- **Sleep detection:** most motherboards blink the power LED while the PC sleeps. The app samples the LED over
+  ~2 s and shows **SLEEP** in amber (the glow blinks like the LED); tap the button to wake it.
+- **Status:** on/off/sleep from the power LED, HDMI signal, latency, last state change, NanoKVM version.
 - **Finds the NanoKVM itself:** scans your Wi-Fi for it on first launch, and learns its Tailscale address after
   login. When the LAN address stops answering it falls back to Tailscale, and rescans if the address changed.
 - **KVM screen:** the NanoKVM web UI, already logged in.
@@ -48,7 +51,8 @@ TP-Link passwords encrypted with an Android Keystore key, so it can log in again
 It talks plain HTTP to the NanoKVM like the web UI does; use it on your LAN or over Tailscale, not the open internet.
 
 ## How it works
-- Status: `GET /api/vm/gpio` (`pwr` = power LED). Buttons: `POST /api/vm/gpio` `{"type":"power"|"reset","duration":ms}`.
+- Status: `GET /api/vm/gpio` (`pwr` = power LED), read every 80-280 ms (random spacing, so no blink rate aliases)
+  for ~2 s. Two or more LED flips in that window, or in the last 20 s with one in the last 6 s, mean sleep. Buttons: `POST /api/vm/gpio` `{"type":"power"|"reset","duration":ms}`.
 - Login: `POST /api/auth/login` with the password CryptoJS-AES encrypted, as the web UI sends it.
 - Tailscale address: `GET /api/extensions/tailscale/status`. Video: `GET /api/vm/hdmi`. Version: `GET /api/vm/info`.
 - LAN discovery: probes the phone's Wi-Fi /24 for a page titled `NanoKVM`.
@@ -63,7 +67,7 @@ they use the debug key. The app has no dependencies: framework Views, `HttpURLCo
 
 ## Development
 No hardware needed: `python3 tools/mock_nanokvm.py` (needs `cryptography`) runs a fake NanoKVM on port 8088
-with a PC that turns on and off. In the emulator, log in to `10.0.2.2:8088` as `admin` / `admin`.
+with a PC that turns on and off; `curl localhost:8088/mock/sleep` puts it to sleep (blinking LED). In the emulator, log in to `10.0.2.2:8088` as `admin` / `admin`.
 `python3 tools/mock_tapo.py` runs two fake Tapo plugs (KLAP on ports 8091/8092, discovery on UDP 20002); log in
 as `test@example.com` / `tapo`. Broadcasts don't reach the host from the emulator, so first seed a plug at
 `10.0.2.2` in the app's `shared_prefs/tapo.xml` (`run-as`); discovery then asks it directly.

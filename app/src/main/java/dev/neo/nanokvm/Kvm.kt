@@ -59,20 +59,44 @@ class Kvm(private val context: Context) {
     var latency = 0L
         private set
 
-    /** Power LED state: true = on. Also records when the app last saw it and when it last changed. */
-    fun isOn(): Boolean {
-        val t = System.nanoTime()
-        val on = call("GET", "/api/vm/gpio", null).getJSONObject("data").getBoolean("pwr")
-        latency = (System.nanoTime() - t) / 1_000_000
+    /**
+     * PC state from the power LED. Most boards blink it while the PC sleeps, so the LED is read every 80-280 ms for
+     * about 2 s; readings from earlier calls (last 20 s) are kept to catch blinks slower than that window.
+     * Two or more LED flips that recently are sleep, one flip is a real power change.
+     */
+    fun power(): Power {
+        val samples = mutableListOf<Pair<Long, Boolean>>()
+        val start = System.currentTimeMillis()
+        while (true) {
+            val t = System.nanoTime()
+            val v = call("GET", "/api/vm/gpio", null).getJSONObject("data").getBoolean("pwr")
+            if (samples.isEmpty()) latency = (System.nanoTime() - t) / 1_000_000
+            samples += System.currentTimeMillis() to v
+            if (flips(samples) >= 2 || System.currentTimeMillis() - start >= 2100) break
+            Thread.sleep(80L + kotlin.random.Random.nextLong(200)) // uneven spacing, so no blink rate can alias
+        }
         val now = System.currentTimeMillis()
-        val e = prefs.edit().putLong("seen", now).putBoolean("on", on)
-        if (!prefs.contains("on") || prefs.getBoolean("on", false) != on) e.putLong("changed", now)
+        val history = (prefs.getString("hist", "").orEmpty().split(",").mapNotNull { e ->
+            val (ts, v) = e.split(":").takeIf { it.size == 2 } ?: return@mapNotNull null
+            (ts.toLongOrNull() ?: return@mapNotNull null) to (v == "1")
+        }.filter { now - it.first < 20_000 } + samples).sortedBy { it.first }
+        val lastFlip = history.zipWithNext().lastOrNull { (a, b) -> a.second != b.second }?.second?.first ?: 0L
+        val p = when {
+            flips(samples) >= 2 || (flips(history) >= 2 && now - lastFlip < 6000) -> Power.SLEEP
+            samples.last().second -> Power.ON
+            else -> Power.OFF
+        }
+        val e = prefs.edit().putLong("seen", now).putString("power", p.name)
+            .putString("hist", history.joinToString(",") { "${it.first}:${if (it.second) 1 else 0}" })
+        if (prefs.getString("power", null) != p.name) e.putLong("changed", now)
         e.apply()
-        return on
+        return p
     }
 
+    private fun flips(s: List<Pair<Long, Boolean>>) = s.zipWithNext().count { (a, b) -> a.second != b.second }
+
     /** Last known state, for widgets drawn without a network call. */
-    val lastOn: Boolean? get() = if (prefs.contains("on")) prefs.getBoolean("on", false) else null
+    val lastPower: Power? get() = prefs.getString("power", null)?.let { runCatching { Power.valueOf(it) }.getOrNull() }
     val lastSeen: Long get() = prefs.getLong("seen", 0)
     val lastChanged: Long get() = prefs.getLong("changed", 0)
 
@@ -168,6 +192,8 @@ class Kvm(private val context: Context) {
             }
         }
 }
+
+enum class Power { ON, OFF, SLEEP }
 
 class KvmError(msg: String) : Exception(msg)
 

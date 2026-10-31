@@ -26,20 +26,21 @@ open class PowerWidget : AppWidgetProvider() {
         /** Redraws every placed widget from the app's last known state; [note] replaces the subtitle. */
         fun render(context: Context, note: String? = null) {
             val kvm = Kvm(context)
-            val on = kvm.lastOn
+            val power = kvm.lastPower
+            val on = power == Power.ON
             val manager = AppWidgetManager.getInstance(context)
             for ((cls, layout) in all) {
                 val ids = manager.getAppWidgetIds(ComponentName(context, cls))
                 if (ids.isEmpty()) continue
                 val v = RemoteViews(context.packageName, layout)
-                v.setImageViewResource(R.id.power, if (on == false) R.drawable.ic_power_off else R.drawable.ic_power_on)
-                v.setInt(R.id.power, "setBackgroundResource", if (on == false) R.drawable.w_btn_off else R.drawable.w_btn_on)
+                v.setImageViewResource(R.id.power, if (on) R.drawable.ic_power_on else if (power == Power.SLEEP) R.drawable.ic_power_sleep else R.drawable.ic_power_off)
+                v.setInt(R.id.power, "setBackgroundResource", if (on) R.drawable.w_btn_on else if (power == Power.SLEEP) R.drawable.w_btn_sleep else R.drawable.w_btn_off)
                 v.setOnClickPendingIntent(R.id.power, broadcast(context, cls, POWER))
                 if (layout != R.layout.widget_1x1) {
-                    v.setTextViewText(R.id.title, when (on) { true -> "PC on"; false -> "PC off"; null -> "PC ?" })
+                    v.setTextViewText(R.id.title, when (power) { Power.ON -> "PC on"; Power.OFF -> "PC off"; Power.SLEEP -> "PC asleep"; null -> "PC ?" })
                     val ago = if (System.currentTimeMillis() - kvm.lastSeen < 60_000) "now" else DateUtils.getRelativeTimeSpanString(kvm.lastSeen, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
                     val via = if (kvm.viaTailscale) "Tailscale" else "LAN"
-                    v.setTextViewText(R.id.sub, note ?: if (!kvm.hasLogin) "open app to log in" else if (on == false) "tap power to wake" else "$via · $ago")
+                    v.setTextViewText(R.id.sub, note ?: if (!kvm.hasLogin) "open app to log in" else if (power == Power.OFF || power == Power.SLEEP) "tap power to wake" else "$via · $ago")
                     v.setOnClickPendingIntent(R.id.status, broadcast(context, cls, REFRESH))
                 }
                 if (layout == R.layout.widget_4x1) {
@@ -69,13 +70,13 @@ open class PowerWidget : AppWidgetProvider() {
             POWER -> work(context, "pressing…") { kvm ->
                 kvm.press("power", 800)
                 Thread.sleep(5000)
-                kvm.isOn()
+                kvm.power()
             }
             else -> super.onReceive(context, intent)
         }
     }
 
-    private fun refresh(context: Context) = work(context, "…") { it.isOn() }
+    private fun refresh(context: Context) = work(context, "…") { it.power() }
 
     private fun work(context: Context, note: String, block: (Kvm) -> Unit) {
         val kvm = Kvm(context)

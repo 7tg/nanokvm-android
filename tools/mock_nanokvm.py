@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 TOKEN = "mock-token"
-state = {"on": True}
+state = {"on": True, "sleep": False}  # GET /mock/sleep puts the fake PC to sleep (LED blinks, 0.6 s on / 0.6 s off)
 
 
 def decrypt(data: str) -> str:
@@ -52,13 +52,17 @@ class H(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
+        if self.path == "/mock/sleep":
+            state["sleep"], state["on"] = True, True
+            return self.send(200, "asleep")
         if self.path == "/":
             return self.send(200, "<!doctype html><title>NanoKVM</title><body style='background:#000;color:#888'>"
                                   "<h1>Mock NanoKVM</h1>PC is " + ("ON" if state["on"] else "OFF"))
         if not self.authed():
             return
         if self.path == "/api/vm/gpio":
-            return self.ok({"pwr": state["on"], "hdd": False})
+            led = int(time.time() / 0.6) % 2 == 0 if state["sleep"] else state["on"]
+            return self.ok({"pwr": led, "hdd": False})
         if self.path == "/api/auth/account":
             return self.ok({"username": "admin", "role": "admin", "permissions": []})
         if self.path == "/api/vm/hdmi":
@@ -82,7 +86,11 @@ class H(BaseHTTPRequestHandler):
             ms = b.get("duration", 800)
             time.sleep(min(ms, 8000) / 1000 / 4)
             if b.get("type") == "power":
-                state["on"] = False if ms >= 4000 else not state["on"]
+                if state["sleep"]:
+                    state["sleep"] = False
+                    state["on"] = ms < 4000
+                else:
+                    state["on"] = False if ms >= 4000 else not state["on"]
             return self.ok()
         self.send(404, "not found")
 
