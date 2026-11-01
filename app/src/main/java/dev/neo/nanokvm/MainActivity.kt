@@ -358,7 +358,8 @@ class MainActivity : Activity() {
 
     private fun refresh() {
         thread {
-            if (kvm.tailscale == null) runCatching { kvm.ensureSession() }
+            // on the LAN, ask again every time: the NanoKVM may have moved to another tailnet
+            if (kvm.tailscale == null || !kvm.viaTailscale) runCatching { kvm.ensureSession() }
             val r = runCatching { kvm.power() }
             val d = if (r.isSuccess) Details(runCatching { kvm.hdmiSignal() }.getOrNull(), runCatching { kvm.version() }.getOrNull()) else null
             runOnUiThread { render(r.getOrNull(), d, r.exceptionOrNull()) }

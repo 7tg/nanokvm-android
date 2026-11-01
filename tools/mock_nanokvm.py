@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 TOKEN = "mock-token"
-state = {"on": True, "sleep": False}  # GET /mock/sleep puts the fake PC to sleep (LED blinks, 0.6 s on / 0.6 s off)
+state = {"on": True, "sleep": False, "ts": "100.64.0.1"}  # GET /mock/ts/<ip> changes the Tailscale address  # GET /mock/sleep puts the fake PC to sleep (LED blinks, 0.6 s on / 0.6 s off)
 
 
 def decrypt(data: str) -> str:
@@ -52,6 +52,9 @@ class H(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
+        if self.path.startswith("/mock/ts/"):
+            state["ts"] = self.path.rsplit("/", 1)[1]
+            return self.send(200, state["ts"])
         if self.path == "/mock/sleep":
             state["sleep"], state["on"] = True, True
             return self.send(200, "asleep")
@@ -70,7 +73,7 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/api/vm/info":
             return self.ok({"ips": [], "mdns": "", "image": "mock", "application": "2.5.2", "deviceKey": ""})
         if self.path == "/api/extensions/tailscale/status":
-            return self.ok({"state": "running", "name": "nanokvm", "ip": "100.64.0.1", "account": "mock"})
+            return self.ok({"state": "running", "name": "nanokvm", "ip": state["ts"], "account": "mock"})
         self.send(404, "not found")
 
     def do_POST(self):
