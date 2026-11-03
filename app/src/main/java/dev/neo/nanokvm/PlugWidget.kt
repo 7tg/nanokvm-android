@@ -61,6 +61,7 @@ class PlugWidget : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TOGGLE) return super.onReceive(context, intent)
         val mac = intent.getStringExtra("mac") ?: return
+        context.tick()
         render(context, mac)
         val result = goAsync()
         thread {

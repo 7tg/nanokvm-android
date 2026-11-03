@@ -17,6 +17,7 @@ import android.os.Looper
 import android.text.InputType
 import android.text.format.DateUtils
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
@@ -302,7 +303,10 @@ class MainActivity : Activity() {
     /** Shrinks a view slightly while it's held down. */
     private fun pressable(v: View) = v.setOnTouchListener { view, e ->
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.95f).scaleY(0.95f).setDuration(90).start()
+            MotionEvent.ACTION_DOWN -> {
+                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                view.animate().scaleX(0.95f).scaleY(0.95f).setDuration(90).start()
+            }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
                 view.animate().scaleX(1f).scaleY(1f).setInterpolator(OvershootInterpolator(2f)).setDuration(220).start()
         }
@@ -347,6 +351,8 @@ class MainActivity : Activity() {
                     c.busy?.cancel(); c.busy = null
                     c.button.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
                     c.hint.text = if (e == null) done else "Error: ${e.message}"
+                    // Second buzz when the NanoKVM confirms the press, a double "reject" buzz when it fails.
+                    c.button.performHapticFeedback(if (e == null) HapticFeedbackConstants.CONFIRM else HapticFeedbackConstants.REJECT)
                     if (e != null) shake(c.hint)
                 }
             }

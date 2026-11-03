@@ -67,11 +67,11 @@ open class PowerWidget : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             REFRESH -> refresh(context)
-            POWER -> work(context, "pressing…") { kvm ->
+            POWER -> { context.tick(); work(context, "pressing…") { kvm ->
                 kvm.press("power", 800)
                 Thread.sleep(5000)
                 kvm.power()
-            }
+            } }
             else -> super.onReceive(context, intent)
         }
     }

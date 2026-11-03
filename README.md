@@ -28,6 +28,8 @@ switches TP-Link Tapo smart plugs, such as the ones powering your monitor and sp
   (pick the plug when you place it). Tap a status widget's text to refresh.
 - **Tablet layout:** controls on the left, the KVM screen on the right.
 - **Animations:** state changes, press feedback and screen entrances; they follow Android's animation settings.
+- **Vibration:** a tick on every button press, plus a confirm buzz when the NanoKVM accepts a power/reset press
+  (a double buzz if it fails). Widget taps tick too. Follows the system's touch-vibration setting.
 
 Requires Android 12+ and a NanoKVM running app 2.5 or later (multi-user API). Tested with the NanoKVM PCIe.
 Wake from off needs the NanoKVM to stay powered while the PC is off (the PCIe version does).
