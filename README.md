@@ -1,5 +1,8 @@
 # NanoKVM for Android
 
+[![Downloads](https://img.shields.io/github/downloads/7tg/nanokvm-android/total?label=downloads)](https://github.com/7tg/nanokvm-android/releases)
+[![Visits](https://hits.sh/github.com/7tg/nanokvm-android.svg?label=visits)](https://hits.sh/github.com/7tg/nanokvm-android/)
+
 Control a PC through its [Sipeed NanoKVM](https://github.com/sipeed/NanoKVM) from your phone or tablet, at home or
 remotely over Tailscale: see whether it's on, press power or reset, force it off, and open the KVM screen. It also
 switches TP-Link Tapo smart plugs, such as the ones powering your monitor and speakers.
